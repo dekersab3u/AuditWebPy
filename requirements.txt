@@ -1,2 +1,6 @@
 urllib3
 urllib
+numpy
+re
+math
+collections
