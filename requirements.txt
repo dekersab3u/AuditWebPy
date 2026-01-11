@@ -7,3 +7,6 @@ collections
 tkinter
 pandas
 threading
+matplotlib
+networkx
+wordcloud

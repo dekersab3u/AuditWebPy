@@ -4,10 +4,12 @@ import math
 from collections import Counter
 
 class Vectoriseur:
-    def __init__(self, crawl_results):
+    def __init__(self, crawl_results, graph_dict):
         self.documents = crawl_results  # [(url, text), ...]
         self.vocabulaire = sorted(list(self._build_vocab()))
         self.tf_raw_matrix = self._build_raw_counts()
+        self.graph = graph_dict
+        self.urls = [doc[0] for doc in self.documents]
 
     def _tokenize(self, text):
         tokens = re.findall(r'\b\w{2,}\b', text.lower())

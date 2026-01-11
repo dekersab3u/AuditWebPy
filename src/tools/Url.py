@@ -3,11 +3,7 @@ from urllib.parse import urlparse, urlunparse, urljoin
 
 class Url:
     def __init__(self, url, base_url=None):
-        """
-        :param url: L'URL brute (chaîne de caractères)
-        :param base_url: (Optionnel) Une chaîne représentant l'URL de la page courante.
-                         Nécessaire pour reconstruire les liens relatifs.
-        """
+
         if base_url:
             self.url = urljoin(base_url, url)
         else:
@@ -19,10 +15,6 @@ class Url:
         self.path = parsed.path  # ex: /formation/index.html
 
     def normalize(self):
-        """
-        Nettoie l'URL : met le domaine en minuscule, supprime les fragments (#ancre).
-        :return: Une chaîne de caractères de l'URL normalisée.
-        """
         if not self.url:
             return ""
 
@@ -44,10 +36,10 @@ class Url:
         return normalized
 
     def is_internal(self, base_url_obj):
-        """
-        Vérifie si l'URL courante appartient au même domaine que l'URL de base.
-        :param base_url_obj: Un objet Url ou une chaîne représentant le site audité.
-        """
+
+        #Vérifie si l'URL courante appartient au même domaine que l'URL de base.
+        if self.scheme not in ["http", "https"]:
+            return False
 
         if isinstance(base_url_obj, str):
             base_domain = urlparse(base_url_obj).netloc
@@ -56,12 +48,15 @@ class Url:
 
         if not self.domain:
             return True
-
+        current_domain = self.domain.lower()
         # nettoyage
-        clean_base = base_domain.replace("www.", "").lower()
-        clean_current = self.domain.replace("www.", "").lower()
+        if base_domain.startswith("www."):
+            base_domain = base_domain[4:]
 
-        return clean_base == clean_current or clean_current.endswith("." + clean_base)
+        if current_domain.startswith("www."):
+            current_domain = current_domain[4:]
+
+        return base_domain == current_domain
 
     def __str__(self):
         return self.url

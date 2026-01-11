@@ -1,6 +1,10 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 import threading
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import networkx as nx
+from wordcloud import WordCloud
 
 from ..tools.Crawler import Crawler
 from ..tools.Vectoriseur import Vectoriseur
@@ -13,11 +17,9 @@ class AuditWindow(tk.Tk):
         self.title("Audit Web - Projet Python")
         self.geometry("1000x700")
 
-        # Variables de stockage des résultats
         self.crawler = None
         self.vectoriseur = None
 
-        # --- Zone du haut : Saisie URL et Bouton ---
         top_frame = tk.Frame(self, pady=10)
         top_frame.pack(fill="x")
 
@@ -33,11 +35,9 @@ class AuditWindow(tk.Tk):
         self.lbl_status = tk.Label(top_frame, text="Prêt", fg="grey")
         self.lbl_status.pack(side="left", padx=10)
 
-        # --- Zone centrale : Les Onglets (Notebook) ---
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # Création des onglets (vides pour l'instant)
         self.tab_logs = tk.Frame(self.notebook)
         self.tab_links = tk.Frame(self.notebook)
         self.tab_cloud = tk.Frame(self.notebook)
@@ -50,19 +50,17 @@ class AuditWindow(tk.Tk):
         self.notebook.add(self.tab_graph, text="Graphe du Site")
         self.notebook.add(self.tab_matrix, text="Matrice Proximité")
 
-        # Ajout d'une zone de texte simple dans le premier onglet pour voir ce qu'il se passe
         self.log_text = tk.Text(self.tab_logs, state='disabled')
         self.log_text.pack(fill="both", expand=True)
 
     def log(self, message):
-        """Affiche un message dans l'onglet Logs"""
+        #message dans onglet logs
         self.log_text.config(state='normal')
         self.log_text.insert(tk.END, message + "\n")
         self.log_text.see(tk.END)
         self.log_text.config(state='disabled')
 
     def start_audit_thread(self):
-        """Lance l'audit dans un thread séparé pour ne pas geler l'interface"""
         url = self.url_entry.get()
         if not url:
             messagebox.showerror("Erreur", "Veuillez entrer une URL valide.")
@@ -72,14 +70,119 @@ class AuditWindow(tk.Tk):
         self.lbl_status.config(text="Audit en cours...", fg="blue")
         self.log("--- Démarrage de l'audit ---")
 
-        # On utilise un Thread pour que la fenêtre ne "plante" pas pendant le chargement
         threading.Thread(target=self.run_process, args=(url,), daemon=True).start()
+
+    def display_broken_links(self):
+        for widget in self.tab_links.winfo_children():
+            widget.destroy()
+
+        links = self.crawler.get_broken_links()
+
+        if not links:
+            tk.Label(self.tab_links, text="Aucun lien cassé trouvé ! Bravo.", fg="green", font=("Arial", 14)).pack(
+                pady=20)
+            return
+
+        columns = ("source", "target", "code")
+        tree = ttk.Treeview(self.tab_links, columns=columns, show="headings")
+
+        tree.heading("source", text="Page d'origine")
+        tree.heading("target", text="Lien mort")
+        tree.heading("code", text="Erreur")
+
+        tree.column("source", width=300)
+        tree.column("target", width=300)
+        tree.column("code", width=100)
+
+        for src, tgt, code in links:
+            tree.insert("", tk.END, values=(src, tgt, code))
+
+        scrollbar = ttk.Scrollbar(self.tab_links, orient=tk.VERTICAL, command=tree.yview)
+        tree.configure(yscroll=scrollbar.set)
+
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        tree.pack(fill=tk.BOTH, expand=True)
+
+    def display_word_cloud(self):
+        for widget in self.tab_cloud.winfo_children():
+            widget.destroy()
+
+        top_words = self.vectoriseur.get_top_n_words(n=100)
+        word_dict = {mot: score for mot, score in top_words}
+
+        if not word_dict:
+            tk.Label(self.tab_cloud, text="Pas assez de données pour le nuage.", fg="red").pack()
+            return
+
+        # Génération du nuage
+        wc = WordCloud(width=800, height=500, background_color='white').generate_from_frequencies(word_dict)
+
+        # Affichage Matplotlib
+        fig = plt.Figure(figsize=(6, 5), dpi=100)
+        ax = fig.add_subplot(111)
+        ax.imshow(wc, interpolation="bilinear")
+        ax.axis("off")
+
+        canvas = FigureCanvasTkAgg(fig, master=self.tab_cloud)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+    def display_graph(self):
+        for widget in self.tab_graph.winfo_children():
+            widget.destroy()
+
+        adj_matrix = self.vectoriseur.get_adjacency_matrix()
+        urls = self.vectoriseur.urls  # Liste des URLs pour les labels
+
+        # Création du graphe NetworkX depuis la matrice numpy
+        G = nx.from_numpy_array(adj_matrix, create_using=nx.DiGraph)
+
+        # Dessin
+        fig = plt.Figure(figsize=(6, 5), dpi=100)
+        ax = fig.add_subplot(111)
+
+        # Disposition (layout)
+        try:
+            pos = nx.spring_layout(G, k=0.5, iterations=20)
+            nx.draw(G, pos, ax=ax, with_labels=True, node_size=300,
+                    node_color='skyblue', font_size=8, arrows=True, edge_color='gray')
+
+            # Légende simple (facultatif si trop chargé)
+            # labels = {i: url.split('/')[-1] for i, url in enumerate(urls)}
+            # nx.draw_networkx_labels(G, pos, labels, ax=ax)
+
+        except Exception as e:
+            ax.text(0.5, 0.5, f"Erreur graphe: {str(e)}", ha='center')
+
+        canvas = FigureCanvasTkAgg(fig, master=self.tab_graph)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+    def display_heatmap(self):
+        for widget in self.tab_matrix.winfo_children():
+            widget.destroy()
+
+        sim_matrix = self.vectoriseur.get_similarity_matrix()
+
+        fig = plt.Figure(figsize=(6, 5), dpi=100)
+        ax = fig.add_subplot(111)
+
+        cax = ax.matshow(sim_matrix, cmap='viridis')
+        fig.colorbar(cax)
+
+        ax.set_title("Similarité entre les pages (Cosinus)")
+        ax.set_xlabel("Index Page")
+        ax.set_ylabel("Index Page")
+
+        canvas = FigureCanvasTkAgg(fig, master=self.tab_matrix)
+        canvas.draw()
+        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
     def run_process(self, url):
         try:
             # 1. Lancement du Crawler
             self.log(f"Crawling de {url} en cours...")
-            self.crawler = Crawler(url)
+            self.crawler = Crawler(url, max_pages=60)
             self.crawler.run()
 
             nb_pages = len(self.crawler.get_results())
@@ -87,24 +190,41 @@ class AuditWindow(tk.Tk):
 
             # 2. Lancement du Vectoriseur
             self.log("Analyse mathématique (Vectorisation)...")
-            # On récupère les résultats ET le graphe du crawler
             self.vectoriseur = Vectoriseur(self.crawler.get_results(), self.crawler.get_graph())
 
             self.log("Calculs terminés.")
 
-            # 3. Mise à jour de l'interface (doit se faire sur le thread principal idéalement,
-            # mais pour l'instant on reste simple)
-            self.lbl_status.config(text="Terminé", fg="green")
-            self.btn_start.config(state="normal")
-
-            # ICI : On appellera les fonctions pour afficher les graphiques plus tard
+            self.after(0, self.update_ui_after_audit)
 
         except Exception as e:
             self.log(f"ERREUR FATALE : {e}")
-            print(e)  # Pour le debug console
-            self.lbl_status.config(text="Erreur", fg="red")
+            print(e)
+            self.after(0, lambda: self.lbl_status.config(text="Erreur", fg="red"))
+            self.after(0, lambda: self.btn_start.config(state="normal"))
+
+            self.lbl_status.config(text="Terminé", fg="green")
             self.btn_start.config(state="normal")
 
+
+
+        """except Exception as e:
+            self.log(f"ERREUR FATALE : {e}")
+            print(e)  # Pour le debug console
+            self.lbl_status.config(text="Erreur", fg="red")
+            self.btn_start.config(state="normal")"""
+
+    def update_ui_after_audit(self):
+        self.lbl_status.config(text="Audit terminé ", fg="green")
+        self.btn_start.config(state="normal")
+
+        # Appel des fonctions d'affichage
+        self.display_broken_links()
+        self.display_word_cloud()
+        self.display_graph()
+        self.display_heatmap()
+
+        self.log("Onglets mis à jour.")
+        messagebox.showinfo("Succès", "Audit terminé, voir onglets")
 
 if __name__ == "__main__":
     app = AuditWindow()

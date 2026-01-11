@@ -6,12 +6,13 @@ import re
 from .Url import Url
 
 class Crawler:
-    def __init__(self, base_url_str):
+    def __init__(self, base_url_str, max_pages=60):
         self.base_url = Url(base_url_str)
         self.visited = set()
         self.output_dir = []
         self.broken_links = []
         self.graph = {}
+        self.max_pages = max_pages
 
     def extract_text(self, soup):
         # soup = doc html
@@ -25,6 +26,9 @@ class Crawler:
     def crawl_page(self, current_url_obj, source_url=None):
         #print(f"DEBUG: Type de current_url_obj = {type(current_url_obj)}")
         #print(f"DEBUG: Valeur = {current_url_obj}")
+        if len(self.visited) >= self.max_pages:
+            return
+
         url_str = current_url_obj.normalize()
 
         if url_str in self.visited:
