@@ -3,6 +3,16 @@ import re
 import math
 from collections import Counter
 
+STOP_WORDS = {
+    "le", "la", "les", "de", "des", "du", "un", "une", "et", "ou", "en",
+    "à", "pour", "par", "dans", "sur", "avec", "sans", "sous", "ce",
+    "cet", "cette", "ces", "qui", "que", "quoi", "dont", "où", "mais",
+    "donc", "or", "ni", "car", "je", "tu", "il", "elle", "nous", "vous",
+    "ils", "elles", "mon", "ton", "son", "ma", "ta", "sa", "mes", "tes",
+    "ses", "notre", "votre", "leur", "nos", "vos", "leurs", "aux", "est",
+    "sont", "c'est", "plus", "pas", "ne", "se", "y", "été", "avoir", "être"
+}
+
 class Vectoriseur:
     def __init__(self, crawl_results, graph_dict):
         self.documents = crawl_results  # [(url, text), ...]
@@ -12,7 +22,8 @@ class Vectoriseur:
         self.urls = [doc[0] for doc in self.documents]
 
     def _tokenize(self, text):
-        tokens = re.findall(r'\b\w{2,}\b', text.lower())
+        raw_tokens = re.findall(r'\b\w{2,}\b', text.lower())
+        tokens = [mot for mot in raw_tokens if mot not in STOP_WORDS and not mot.isdigit()]
         return tokens
 
     def _build_vocab(self):

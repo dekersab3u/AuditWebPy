@@ -132,24 +132,33 @@ class AuditWindow(tk.Tk):
             widget.destroy()
 
         adj_matrix = self.vectoriseur.get_adjacency_matrix()
-        urls = self.vectoriseur.urls  # Liste des URLs pour les labels
+        urls = self.vectoriseur.urls
 
-        # Création du graphe NetworkX depuis la matrice numpy
-        G = nx.from_numpy_array(adj_matrix, create_using=nx.DiGraph)
+        labels = {}
+        for i, url in enumerate(urls):
+            short_name = url.rstrip('/').split('/')[-1]
+            if not short_name:
+                short_name = "homepage"
+            labels[i] = short_name
 
-        # Dessin
+        graphs = nx.from_numpy_array(adj_matrix, create_using=nx.DiGraph)
+
         fig = plt.Figure(figsize=(6, 5), dpi=100)
         ax = fig.add_subplot(111)
 
-        # Disposition (layout)
-        try:
-            pos = nx.spring_layout(G, k=0.5, iterations=20)
-            nx.draw(G, pos, ax=ax, with_labels=True, node_size=300,
-                    node_color='skyblue', font_size=8, arrows=True, edge_color='gray')
 
-            # Légende simple (facultatif si trop chargé)
-            # labels = {i: url.split('/')[-1] for i, url in enumerate(urls)}
-            # nx.draw_networkx_labels(G, pos, labels, ax=ax)
+        try:
+            pos = nx.spring_layout(graphs, k=0.5, iterations=20)
+            """
+            nx.draw(graphs, pos, ax=ax, with_labels=True, node_size=300,
+                    node_color='skyblue', font_size=8, arrows=True, edge_color='gray')
+            """
+            nx.draw_networkx_nodes(graphs, pos, ax=ax, node_size=500, node_color='lightblue')
+            nx.draw_networkx_edges(graphs, pos, ax=ax, edge_color='gray', arrows=True)
+            nx.draw_networkx_labels(graphs, pos, labels, ax=ax, font_size=8, font_weight="bold")
+
+            ax.set_title("Structure des liens (Interne)", fontsize=10)
+            ax.axis("off")
 
         except Exception as e:
             ax.text(0.5, 0.5, f"Erreur graphe: {str(e)}", ha='center')
@@ -163,6 +172,20 @@ class AuditWindow(tk.Tk):
             widget.destroy()
 
         sim_matrix = self.vectoriseur.get_similarity_matrix()
+        urls = self.vectoriseur.urls
+
+        # labels courts
+        short_labels = []
+        for url in urls:
+            name = url.rstrip('/').split('/')[-1]
+            short_labels.append(name if name else "Accueil")
+
+        if len(urls) > 60:
+            show_labels = False
+            title_suffix = "(Trop de pages pour afficher les noms)"
+        else:
+            show_labels = True
+            title_suffix = ""
 
         fig = plt.Figure(figsize=(6, 5), dpi=100)
         ax = fig.add_subplot(111)
@@ -170,9 +193,21 @@ class AuditWindow(tk.Tk):
         cax = ax.matshow(sim_matrix, cmap='viridis')
         fig.colorbar(cax)
 
-        ax.set_title("Similarité entre les pages (Cosinus)")
-        ax.set_xlabel("Index Page")
-        ax.set_ylabel("Index Page")
+        ax.set_title(f"Similarité (Cosinus) {title_suffix}", fontsize=10)
+
+        if show_labels:
+
+            ax.set_xticks(range(len(short_labels)))
+            ax.set_yticks(range(len(short_labels)))
+
+
+            ax.set_xticklabels(short_labels, rotation=90, fontsize=8)
+            ax.set_yticklabels(short_labels, fontsize=8)
+        else:
+            ax.set_xlabel("Index Page")
+            ax.set_ylabel("Index Page")
+
+        fig.tight_layout()
 
         canvas = FigureCanvasTkAgg(fig, master=self.tab_matrix)
         canvas.draw()
