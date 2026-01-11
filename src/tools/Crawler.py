@@ -3,16 +3,15 @@ import requests
 from bs4 import BeautifulSoup
 import re
 
-from Url import Url
+from .Url import Url
 
 class Crawler:
     def __init__(self, base_url_str):
         self.base_url = Url(base_url_str)
         self.visited = set()
         self.output_dir = []
-
-        #liens morts pour audit
         self.broken_links = []
+        self.graph = {}
 
     def extract_text(self, soup):
         # soup = doc html
@@ -24,11 +23,14 @@ class Crawler:
         return re.sub(r"\s+", " ", text).strip()
 
     def crawl_page(self, current_url_obj, source_url=None):
+        #print(f"DEBUG: Type de current_url_obj = {type(current_url_obj)}")
+        #print(f"DEBUG: Valeur = {current_url_obj}")
         url_str = current_url_obj.normalize()
 
         if url_str in self.visited:
             return
         self.visited.add(url_str)
+        self.graph[url_str] = []
 
         logging.info(f"Scan de : {url_str}")
         print(f"Scan de : {url_str}")  # console
@@ -53,12 +55,12 @@ class Crawler:
 
             for link_tag in soup.find_all("a", href=True):
                 raw_href = link_tag["href"]
-
                 # url courante comme base
                 next_url_obj = Url(raw_href, base_url=url_str)
-
                 # suit lien si interne
                 if next_url_obj.is_internal(self.base_url):
+                    normalized_next = next_url_obj.normalize()
+                    self.graph[url_str].append(normalized_next)
                     self.crawl_page(next_url_obj, source_url=url_str)
 
         except requests.exceptions.RequestException as e:
@@ -80,3 +82,6 @@ class Crawler:
 
     def get_broken_links(self):
             return self.broken_links
+
+    def get_graph(self):
+        return self.graph

@@ -4,3 +4,6 @@ numpy
 re
 math
 collections
+tkinter
+pandas
+threading

@@ -69,6 +69,25 @@ class Vectoriseur:
         similarity_matrix = np.dot(normalized_tfidf, normalized_tfidf.T)
         return similarity_matrix
 
+    def get_adjacency_matrix(self):
+        """
+        matrice d'adjacence du graphe web.
+        M[i][j] = 1 si l'URL i contient un lien vers l'URL j.
+        """
+        n = len(self.urls)
+        adj_matrix = np.zeros((n, n), dtype=int)
+
+        url_to_index = {url: i for i, url in enumerate(self.urls)}
+        for i, source_url in enumerate(self.urls):
+            targets = self.graph.get(source_url, [])
+
+            for target_url in targets:
+                if target_url in url_to_index:
+                    j = url_to_index[target_url]
+                    adj_matrix[i][j] = 1
+
+        return adj_matrix
+
 
 """
 import numpy as np
