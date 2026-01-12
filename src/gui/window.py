@@ -15,7 +15,7 @@ class AuditWindow(tk.Tk):
         super().__init__()
 
         self.title("Audit Web - Projet Python")
-        self.geometry("1000x700")
+        self.geometry("1280x720")
 
         self.crawler = None
         self.vectoriseur = None
@@ -29,11 +29,19 @@ class AuditWindow(tk.Tk):
         self.url_entry.insert(0, "")  # Valeur par défaut
         self.url_entry.pack(side="left", padx=5)
 
+        tk.Label(top_frame, text="Max Pages :").pack(side="left", padx=5)
+        self.max_pages_entry = tk.Entry(top_frame, width=5)
+        self.max_pages_entry.insert(0, "60")  # Valeur par défaut
+        self.max_pages_entry.pack(side="left", padx=5)
+
         self.btn_start = tk.Button(top_frame, text="Lancer l'Audit", command=self.start_audit_thread)
         self.btn_start.pack(side="left", padx=10)
 
         self.lbl_status = tk.Label(top_frame, text="Prêt", fg="grey")
         self.lbl_status.pack(side="left", padx=10)
+
+        self.lbl_counter = tk.Label(top_frame, text="Pages : 0", font=("Arial", 16, "bold"), fg="blue", borderwidth=2)
+        self.lbl_counter.pack(side="right", padx=20)
 
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill="both", expand=True, padx=10, pady=10)
@@ -41,14 +49,16 @@ class AuditWindow(tk.Tk):
         self.tab_logs = tk.Frame(self.notebook)
         self.tab_links = tk.Frame(self.notebook)
         self.tab_cloud = tk.Frame(self.notebook)
+        self.tab_words_table = tk.Frame(self.notebook)  # tableau mots
         self.tab_graph = tk.Frame(self.notebook)
         self.tab_matrix = tk.Frame(self.notebook)
 
         self.notebook.add(self.tab_logs, text="Logs & Infos")
-        self.notebook.add(self.tab_links, text="Liens Cassés")
-        self.notebook.add(self.tab_cloud, text="Nuage de Mots")
-        self.notebook.add(self.tab_graph, text="Graphe du Site")
-        self.notebook.add(self.tab_matrix, text="Matrice Proximité")
+        self.notebook.add(self.tab_links, text="Liens cassés")
+        self.notebook.add(self.tab_cloud, text="Nuage de mots")
+        # self.notebook.add(self.tab_words_table, text="Tableau Mots")
+        self.notebook.add(self.tab_graph, text="Graphe du site")
+        self.notebook.add(self.tab_matrix, text="Matrice de proximité")
 
         self.log_text = tk.Text(self.tab_logs, state='disabled')
         self.log_text.pack(fill="both", expand=True)
@@ -62,15 +72,27 @@ class AuditWindow(tk.Tk):
 
     def start_audit_thread(self):
         url = self.url_entry.get()
+
+        # recup max pages
+        try:
+            max_p = int(self.max_pages_entry.get())
+        except ValueError:
+            messagebox.showerror("Erreur", "Le nombre de pages max doit être un entier.")
+            return
+
         if not url:
             messagebox.showerror("Erreur", "Veuillez entrer une URL valide.")
             return
 
         self.btn_start.config(state="disabled")
         self.lbl_status.config(text="Audit en cours...", fg="blue")
+        self.lbl_counter.config(text="Pages : 0")  # Reset compteur
         self.log("--- Démarrage de l'audit ---")
+        threading.Thread(target=self.run_process, args=(url, max_p), daemon=True).start()
 
-        threading.Thread(target=self.run_process, args=(url,), daemon=True).start()
+    def update_counter_ui(self, count):
+        """Callback appelé par le Crawler pour mettre à jour l'interface"""
+        self.after(0, lambda: self.lbl_counter.config(text=f"Pages trouvées : {count}"))
 
     def display_broken_links(self):
         for widget in self.tab_links.winfo_children():
@@ -79,7 +101,7 @@ class AuditWindow(tk.Tk):
         links = self.crawler.get_broken_links()
 
         if not links:
-            tk.Label(self.tab_links, text="Aucun lien cassé trouvé ! Bravo.", fg="green", font=("Arial", 14)).pack(
+            tk.Label(self.tab_links, text="Aucun lien cassé trouvé !", fg="green", font=("Arial", 14)).pack(
                 pady=20)
             return
 
@@ -111,7 +133,7 @@ class AuditWindow(tk.Tk):
         word_dict = {mot: score for mot, score in top_words}
 
         if not word_dict:
-            tk.Label(self.tab_cloud, text="Pas assez de données pour le nuage.", fg="red").pack()
+            tk.Label(self.tab_cloud, text="Pas assez de mots.", fg="red").pack()
             return
 
         # wordcloud
@@ -213,11 +235,11 @@ class AuditWindow(tk.Tk):
         canvas.draw()
         canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
-    def run_process(self, url):
+    def run_process(self, url, max_pages):
         try:
             # appel Crawler
             self.log(f"Crawling de {url} en cours...")
-            self.crawler = Crawler(url, max_pages=60)
+            self.crawler = Crawler(url, max_pages=max_pages, progress_callback=self.update_counter_ui)
             self.crawler.run()
 
             nb_pages = len(self.crawler.get_results())
