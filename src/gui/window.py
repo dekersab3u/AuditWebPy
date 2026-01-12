@@ -114,7 +114,7 @@ class AuditWindow(tk.Tk):
             tk.Label(self.tab_cloud, text="Pas assez de données pour le nuage.", fg="red").pack()
             return
 
-        # Génération du nuage
+        # wordcloud
         wc = WordCloud(width=800, height=500, background_color='white').generate_from_frequencies(word_dict)
 
         # Affichage Matplotlib
@@ -215,7 +215,7 @@ class AuditWindow(tk.Tk):
 
     def run_process(self, url):
         try:
-            # 1. Lancement du Crawler
+            # appel Crawler
             self.log(f"Crawling de {url} en cours...")
             self.crawler = Crawler(url, max_pages=60)
             self.crawler.run()
@@ -223,7 +223,7 @@ class AuditWindow(tk.Tk):
             nb_pages = len(self.crawler.get_results())
             self.log(f"Crawl terminé. {nb_pages} pages trouvées.")
 
-            # 2. Lancement du Vectoriseur
+            # appel Vectoriseur
             self.log("Analyse mathématique (Vectorisation)...")
             self.vectoriseur = Vectoriseur(self.crawler.get_results(), self.crawler.get_graph())
 
@@ -252,7 +252,7 @@ class AuditWindow(tk.Tk):
         self.lbl_status.config(text="Audit terminé ", fg="green")
         self.btn_start.config(state="normal")
 
-        # Appel des fonctions d'affichage
+        # affichage
         self.display_broken_links()
         self.display_word_cloud()
         self.display_graph()
