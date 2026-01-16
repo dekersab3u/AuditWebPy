@@ -10,3 +10,5 @@ threading
 matplotlib
 networkx
 wordcloud
+sys
+ctypes

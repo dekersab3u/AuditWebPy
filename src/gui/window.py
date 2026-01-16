@@ -56,7 +56,7 @@ class AuditWindow(tk.Tk):
         self.notebook.add(self.tab_logs, text="Logs & Infos")
         self.notebook.add(self.tab_links, text="Liens cassés")
         self.notebook.add(self.tab_cloud, text="Nuage de mots")
-        # self.notebook.add(self.tab_words_table, text="Tableau Mots")
+        self.notebook.add(self.tab_words_table, text="Tableau Mots")
         self.notebook.add(self.tab_graph, text="Graphe du site")
         self.notebook.add(self.tab_matrix, text="Matrice de proximité")
 
@@ -93,6 +93,67 @@ class AuditWindow(tk.Tk):
     def update_counter_ui(self, count):
         """Callback appelé par le Crawler pour mettre à jour l'interface"""
         self.after(0, lambda: self.lbl_counter.config(text=f"Pages trouvées : {count}"))
+
+    def _create_scrollable_area(self, parent_tab):
+        """
+        Utilitaire pour nettoyer un onglet et y ajouter des scrollbars.
+        Renvoie une 'frame' interne où l'on peut dessiner les graphiques.
+        """
+        # 1. Nettoyage
+        for widget in parent_tab.winfo_children():
+            widget.destroy()
+
+        # 2. Création du conteneur principal
+        container = tk.Frame(parent_tab)
+        container.pack(fill="both", expand=True)
+
+        # 3. Création du Canvas et des Scrollbars
+        canvas = tk.Canvas(container, bg="white")
+        v_scroll = tk.Scrollbar(container, orient="vertical", command=canvas.yview)
+        h_scroll = tk.Scrollbar(container, orient="horizontal", command=canvas.xview)
+
+        canvas.configure(yscrollcommand=v_scroll.set, xscrollcommand=h_scroll.set)
+
+        # 4. Placement via Grid (pour que les scrollbars collent aux bords)
+        canvas.grid(row=0, column=0, sticky="nsew")
+        v_scroll.grid(row=0, column=1, sticky="ns")
+        h_scroll.grid(row=1, column=0, sticky="ew")
+
+        # Configuration du poids pour que le canvas prenne toute la place
+        container.grid_rowconfigure(0, weight=1)
+        container.grid_columnconfigure(0, weight=1)
+
+        # 5. Création de la Frame interne (C'est là qu'on mettra le graphe)
+        inner_frame = tk.Frame(canvas, bg="white")
+
+        # On crée une fenêtre dans le canvas qui contient la frame
+        canvas_window = canvas.create_window((0, 0), window=inner_frame, anchor="nw")
+
+        # 6. Fonction pour mettre à jour la zone de scroll quand le contenu change
+        def configure_scroll_region(event):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        inner_frame.bind("<Configure>", configure_scroll_region)
+
+        # Optionnel : Centrage si le contenu est plus petit que la fenêtre
+
+        def center_content(event):
+            canvas_width = event.width
+            canvas_height = event.height
+            frame_width = inner_frame.winfo_reqwidth()
+            frame_height = inner_frame.winfo_reqheight()
+
+            # Si le graphe est plus petit que la fenêtre, on centre
+            x_pos = max(0, (canvas_width - frame_width) // 2)
+            # Pour Y, on laisse souvent en haut, mais on peut centrer aussi :
+            y_pos = max(0, (canvas_height - frame_height) // 2)
+
+            # Déplacement de la fenêtre interne
+            canvas.coords(canvas_window, x_pos, y_pos)
+
+        canvas.bind("<Configure>", center_content)
+
+        return inner_frame
 
     def display_broken_links(self):
         for widget in self.tab_links.winfo_children():
@@ -149,13 +210,45 @@ class AuditWindow(tk.Tk):
         canvas.draw()
         canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
-    def display_graph(self):
-        for widget in self.tab_graph.winfo_children():
+    def display_words_table(self):
+        for widget in self.tab_words_table.winfo_children():
             widget.destroy()
+
+        if self.vectoriseur:
+            top_words = self.vectoriseur.get_top_n_words(n=100)
+        else:
+            return
+
+        if not top_words:
+            tk.Label(self.tab_words_table, text="Aucune donnée textuelle analysée.", font=("Arial", 12)).pack(pady=20)
+            return
+
+        frame_table = tk.Frame(self.tab_words_table)
+        frame_table.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        columns = ("rang", "mot", "count")
+        tree = ttk.Treeview(frame_table, columns=columns, show="headings")
+        tree.heading("rang", text="#")
+        tree.heading("mot", text="Mot trouvé")
+        tree.heading("count", text="Fréquence")
+        tree.column("rang", width=50, anchor="center")
+        tree.column("mot", width=300, anchor="w")  # aligné gauche
+        tree.column("count", width=100, anchor="center")
+
+        for i, (mot, score) in enumerate(top_words):
+            tree.insert("", tk.END, values=(i + 1, mot, score))
+
+        scrollbar = ttk.Scrollbar(frame_table, orient=tk.VERTICAL, command=tree.yview)
+        tree.configure(yscroll=scrollbar.set)
+
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        tree.pack(fill=tk.BOTH, expand=True)
+
+    def display_graph(self):
+        scrollable_frame = self._create_scrollable_area(self.tab_graph)
 
         adj_matrix = self.vectoriseur.get_adjacency_matrix()
         urls = self.vectoriseur.urls
-
+        #scrollable_frame = self._create_scrollable_area(self.tab_graph)
         labels = {}
         for i, url in enumerate(urls):
             short_name = url.rstrip('/').split('/')[-1]
@@ -165,7 +258,7 @@ class AuditWindow(tk.Tk):
 
         graphs = nx.from_numpy_array(adj_matrix, create_using=nx.DiGraph)
 
-        fig = plt.Figure(figsize=(6, 5), dpi=100)
+        fig = plt.Figure(figsize=(8, 5), dpi=100)
         ax = fig.add_subplot(111)
 
 
@@ -185,13 +278,12 @@ class AuditWindow(tk.Tk):
         except Exception as e:
             ax.text(0.5, 0.5, f"Erreur graphe: {str(e)}", ha='center')
 
-        canvas = FigureCanvasTkAgg(fig, master=self.tab_graph)
+        canvas = FigureCanvasTkAgg(fig, master=scrollable_frame)
         canvas.draw()
-        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        canvas.get_tk_widget().pack()
 
     def display_heatmap(self):
-        for widget in self.tab_matrix.winfo_children():
-            widget.destroy()
+        scrollable_frame = self._create_scrollable_area(self.tab_matrix)
 
         sim_matrix = self.vectoriseur.get_similarity_matrix()
         urls = self.vectoriseur.urls
@@ -200,7 +292,10 @@ class AuditWindow(tk.Tk):
         short_labels = []
         for url in urls:
             name = url.rstrip('/').split('/')[-1]
+            if len(name) > 25:
+                name = "..." + name[-22:]
             short_labels.append(name if name else "Accueil")
+
 
         if len(urls) > 60:
             show_labels = False
@@ -209,7 +304,7 @@ class AuditWindow(tk.Tk):
             show_labels = True
             title_suffix = ""
 
-        fig = plt.Figure(figsize=(6, 5), dpi=100)
+        fig = plt.Figure(figsize=(8, 5), dpi=100)
         ax = fig.add_subplot(111)
 
         cax = ax.matshow(sim_matrix, cmap='viridis')
@@ -231,7 +326,7 @@ class AuditWindow(tk.Tk):
 
         fig.tight_layout()
 
-        canvas = FigureCanvasTkAgg(fig, master=self.tab_matrix)
+        canvas = FigureCanvasTkAgg(fig, master=scrollable_frame)
         canvas.draw()
         canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
@@ -277,6 +372,7 @@ class AuditWindow(tk.Tk):
         # affichage
         self.display_broken_links()
         self.display_word_cloud()
+        self.display_words_table()
         self.display_graph()
         self.display_heatmap()
 
